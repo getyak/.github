@@ -7,7 +7,7 @@
     human relationships, and real-world decisions.
   </p>
   <p>
-    <a href="https://cubxxw.com/projects/"><strong>Product index</strong></a>
+    <a href="https://cubxxw.com/projects/"><strong>Explore the products →</strong></a>
     ·
     <a href="https://cubxxw.com/">Field notes</a>
   </p>
@@ -40,40 +40,26 @@ consequences.
 - [Rumu](https://github.com/getyak/rumu) explores what a living, human-annotated
   library for canonical books could feel like.
 
-## Our operating contract
+## How we build
 
-These are product rules, not slogans:
+- **Evidence before inference.** Keep every consequential claim traceable to its
+  source.
+- **Humans approve consequences.** Models may propose; people authorize external
+  or irreversible actions.
+- **Reversible by default.** Prefer local state, previews, checkpoints, and
+  recovery paths.
+- **Complete loops over broad surfaces.** Prove one useful path end to end before
+  adding more.
 
-1. **Start from a real decision.** A feature must help a specific person make,
-   review, or carry forward a meaningful decision.
-2. **Preserve source context.** Derived views may be regenerated; evidence must
-   remain traceable to its source.
-3. **Separate evidence from interpretation.** Proposed, confirmed, ambiguous,
-   superseded, and dismissed states must not collapse into one confident answer.
-4. **Put the human at consequence.** Models may draft, classify, or propose.
-   A person approves actions that affect another person, an external system, or
-   an irreversible outcome.
-5. **Prefer reversible systems.** Local-first storage, previews, explicit
-   checkpoints, and recovery paths beat invisible automation.
-6. **Ship complete loops.** We would rather prove one narrow path end to end
-   than accumulate a wide surface of disconnected features.
+## Build with us
 
-## How we work in public
+Start with a real user job, show the evidence, keep the change reviewable, and
+use synthetic or explicitly authorized data. AI assistance is welcome; the
+contributor remains responsible for the result.
 
-- Issues should name the user job, observed behavior, evidence, and desired
-  outcome—not only a feature idea.
-- Pull requests should be small enough to review, explain their tradeoffs, and
-  include the verification used.
-- Examples and tests must use synthetic or explicitly authorized data. Never
-  commit private conversations, candidate information, credentials, or raw
-  personal archives.
-- AI-assisted work is welcome. The contributor remains responsible for
-  correctness, attribution, security, and the final judgment.
-- Repository-specific guidance always takes precedence over these organization
-  defaults.
-
-Read the default [contribution guide](../CONTRIBUTING.md),
-[security policy](../SECURITY.md), and [community standards](../CODE_OF_CONDUCT.md).
+[Contribution guide](../CONTRIBUTING.md) ·
+[Security policy](../SECURITY.md) ·
+[Community standards](../CODE_OF_CONDUCT.md)
 
 ---
 
