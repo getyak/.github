@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Getyak organization mark</title>
+  <desc id="desc">An abstract yak head and horns with a red signal at the center.</desc>
+  <rect width="1024" height="1024" rx="224" fill="#F3EFE6"/>
+  <path d="M474 342C404 249 309 202 211 223c34 18 65 47 88 84 36 58 83 93 153 105l22-70Z" fill="#171613"/>
+  <path d="M550 342c70-93 165-140 263-119-34 18-65 47-88 84-36 58-83 93-153 105l-22-70Z" fill="#171613"/>
+  <path d="M391 333c39-31 79-46 121-46s82 15 121 46l-31 253c-8 68-39 124-90 169-51-45-82-101-90-169l-31-253Z" fill="#171613"/>
+  <circle cx="512" cy="430" r="43" fill="#D73A2F"/>
+</svg>
