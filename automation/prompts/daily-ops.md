@@ -14,8 +14,11 @@ Run once on weekdays in `Asia/Shanghai`. This is a read-mostly control loop.
    security coverage. Treat `recent_failed_runs` as default-branch candidates,
    not proof of an incident, and inspect failure steps before classifying them.
 5. Check the automation host for disk pressure, memory pressure, unhealthy
-   containers, stopped required services, and expiring certificates. Never
-   include secret values or private data in output.
+   containers, stopped required services, and expiring certificates. Read the
+   cached macOS update inventory and reject it as stale when its successful scan
+   is older than 48 hours. A restart update is maintenance debt, not an incident;
+   include it only when its version differs from the last version recorded after
+   a verified digest post. Never include secret values or private data in output.
 6. Compare each finding with the latest `#ops` threads. Reuse an unresolved
    thread with the same fingerprint; do not create a duplicate root.
 7. Post immediately only for new SEV-1/2 findings. Otherwise create at most one
@@ -23,8 +26,8 @@ Run once on weekdays in `Asia/Shanghai`. This is a read-mostly control loop.
    nothing.
 8. Put scoped engineering work in `#build`, preferably as a reply linking the
    original `#ops` thread. Do not deploy, rotate secrets, change permissions,
-   grant OAuth access, or send external communications without explicit human
-   approval.
+   grant OAuth access, install system updates, restart the host, or send external
+   communications without explicit human approval naming the action and target.
 9. When evidence confirms recovery, reply once to the original incident and
    mark the state resolved. Never infer recovery from elapsed time.
 

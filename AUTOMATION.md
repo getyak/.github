@@ -19,8 +19,8 @@ Every automation follows the same loop:
    [`automation/slack-routing.md`](automation/slack-routing.md). Later updates
    remain in that thread.
 5. **Approve** any consequential action. Production deploys, permission
-   changes, secret rotation, account linking, and external messages always
-   retain a human checkpoint.
+   changes, secret rotation, account linking, host updates or restarts, and
+   external messages always retain a human checkpoint.
 6. **Execute and verify** the approved action against the original source.
 7. **Close the loop** in the original thread with the observed recovery or a
    concise statement of what remains blocked.

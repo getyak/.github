@@ -11,7 +11,7 @@ evidence in GitHub, an Eval artifact, or an operator runbook.
 | `#hq` | One weekly portfolio summary; a decision that needs a human; a material launch or incident postmortem | Raw CI, dependency-update failures, routine deploys, model traces |
 | `#build` | A scoped `@Codex` task; a pull request ready for review; a release or deploy requiring approval; the final release result | Every commit, every successful job, duplicate PR updates |
 | `#signals` | Eval regressions with a baseline; clustered user evidence; a measurable product trend; a weekly Eval digest | Unsupported ideas, raw private content, individual flaky tests |
-| `#ops` | New actionable CI or scheduled-job failure; production degradation; high/critical security debt; host-capacity risk; recovery for a prior alert | Green runs with no prior incident, known repeated failures as new roots, full logs |
+| `#ops` | New actionable CI or scheduled-job failure; production degradation; high/critical security debt; host-capacity risk; deduplicated planned-maintenance debt; recovery for a prior alert | Green runs with no prior incident, known repeated failures as new roots, full logs |
 | `#lounge` | No automated messages | All automation |
 
 ## One incident, one thread
@@ -47,6 +47,24 @@ second root message for the same unresolved fingerprint.
 At most one daily operational digest and one weekly Eval digest may create new
 summary roots. Immediate SEV-1/2 incidents are exempt.
 
+## Host maintenance routing
+
+- A recommended macOS update that requires restart is planned maintenance debt,
+  not an incident. Include it in the daily `#ops` digest only when the available
+  version changes; routine hourly sentinels remain silent.
+- Use the cached, timestamped update inventory as evidence. A stale or failed
+  inventory scan is a host-observability failure, not proof that the machine is
+  current.
+- Installing an update or restarting the automation host requires an explicit
+  human message naming the host, target version, and maintenance window.
+- Before execution, verify a fresh off-machine backup and restore drill, drain
+  active builds and deployments, and pause stateful automation cleanly. After
+  reboot, verify the host-health endpoint and required services before replying
+  with recovery.
+- If an update exceeds an operator-defined security SLA or blocks a required
+  security fix, promote it to one stable `#ops` incident thread. Do not create a
+  new root for each scan.
+
 ## Eval routing
 
 An Eval notification must contain:
@@ -71,9 +89,9 @@ Reactions are acknowledgements, not general-purpose authorization:
 - `:white_check_mark:` means evidence was reviewed or an incident is resolved.
 - `:no_entry:` means stop or reject the proposed action.
 
-Production deploys, permission changes, secret rotation, OAuth connections, and
-external communications require an explicit human message that names the
-action and target. A reaction alone is insufficient.
+Production deploys, permission changes, secret rotation, OAuth connections,
+host updates or restarts, and external communications require an explicit human
+message that names the action and target. A reaction alone is insufficient.
 
 ## Codex and ChatGPT roles
 
