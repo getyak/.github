@@ -39,6 +39,11 @@ A pull request description should answer:
 - What remains intentionally out of scope?
 - Does it affect privacy, security, human approval, or external side effects?
 
+Cross-repository automation, Eval, and Slack notification changes must also
+follow the [Getyak automation control plane](AUTOMATION.md). In particular,
+declare the durable evidence source, deduplication fingerprint, recovery path,
+and human approval boundary.
+
 ## AI-assisted contributions
 
 AI assistance is welcome, but authorship still carries responsibility.

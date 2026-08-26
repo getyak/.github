@@ -1,0 +1,87 @@
+version: 1
+
+workspace:
+  github_organization: getyak
+  slack_workspace: getyak
+  timezone: Asia/Shanghai
+
+channels:
+  hq:
+    purpose: durable decisions and weekly portfolio review
+    urgency: never_page
+  build:
+    purpose: engineering execution, pull requests, releases, and Codex tasks
+    urgency: working_hours
+  signals:
+    purpose: user evidence, Eval regressions, and validated product signals
+    urgency: digest
+  ops:
+    purpose: actionable CI, security, deployment, and automation incidents
+    urgency: actionable_only
+  lounge:
+    purpose: human conversation
+    automation: prohibited
+
+repositories:
+  talent-signal:
+    lifecycle: active
+    surfaces: [backend, ios, testflight]
+    eval_mode: native
+    ci_route: ops
+    eval_route: signals
+    release_route: build
+  daypage:
+    lifecycle: active
+    surfaces: [ios, android, web, testflight]
+    eval_mode: tests_and_product_feedback
+    ci_route: ops
+    eval_route: signals
+    release_route: build
+  FitCoach:
+    lifecycle: active
+    surfaces: [ios, github_pages, testflight]
+    eval_mode: tests
+    ci_route: ops
+    eval_route: signals
+    release_route: build
+  apply-agent:
+    lifecycle: active
+    surfaces: [web, backend, production]
+    eval_mode: native
+    ci_route: ops
+    eval_route: signals
+    release_route: build
+  telepace-next:
+    lifecycle: active
+    surfaces: [frontend, backend, production]
+    eval_mode: native
+    ci_route: ops
+    eval_route: signals
+    release_route: build
+  solo-compass:
+    lifecycle: active
+    surfaces: [ios, web, scheduled_content, testflight]
+    eval_mode: tests_and_content_quality
+    ci_route: ops
+    eval_route: signals
+    release_route: build
+  cct:
+    lifecycle: maintenance
+    surfaces: [frontend, backend, local_data]
+    eval_mode: none_declared
+    ci_route: ops
+    eval_route: signals
+    release_route: build
+  rumu:
+    lifecycle: experiment
+    surfaces: [prototype]
+    eval_mode: none_declared
+    ci_route: ops
+    eval_route: signals
+    release_route: build
+
+excluded_from_slack:
+  - private signing repositories
+  - secrets and credential values
+  - raw personal or customer data
+  - full build logs unless explicitly requested in a private review
