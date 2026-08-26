@@ -27,6 +27,15 @@ repositories:
     lifecycle: active
     surfaces: [backend, ios, testflight]
     eval_mode: native
+    eval_contract:
+      maturity: versioned_manual
+      primary_suite: evals/candidate-momentum-v1.json
+      command: pnpm eval:core
+      evidence: docs/evaluations/
+      ci_workflow: null
+      acceptance: all synthetic contract assertions pass
+      privacy: synthetic_only
+      gap: the primary Eval suite is not an explicit required CI check
     ci_route: ops
     eval_route: signals
     release_route: build
@@ -34,6 +43,15 @@ repositories:
     lifecycle: active
     surfaces: [ios, android, web, testflight]
     eval_mode: tests_and_product_feedback
+    eval_contract:
+      maturity: deterministic_test_proxy
+      primary_suite: packages/contracts/fixtures/
+      command: pnpm contracts:test
+      evidence: .github/workflows/ci.yml
+      ci_workflow: .github/workflows/ci.yml
+      acceptance: all versioned sync and attachment contract fixtures pass
+      privacy: synthetic_only
+      gap: no versioned candidate-versus-baseline product-quality metric
     ci_route: ops
     eval_route: signals
     release_route: build
@@ -41,6 +59,15 @@ repositories:
     lifecycle: active
     surfaces: [ios, github_pages, testflight]
     eval_mode: tests
+    eval_contract:
+      maturity: deterministic_test_proxy
+      primary_suite: FitCoachTests/Fixtures/FitCoachV1.store
+      command: "xcodegen generate && xcodebuild test -project FitCoach.xcodeproj -scheme FitCoach -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' CODE_SIGNING_ALLOWED=NO"
+      evidence: FitCoach-xcresult artifact
+      ci_workflow: .github/workflows/ios.yml
+      acceptance: unit and UI suites pass with an attached xcresult
+      privacy: synthetic_only
+      gap: no versioned product-quality baseline; UI synchronization is flaky
     ci_route: ops
     eval_route: signals
     release_route: build
@@ -48,6 +75,15 @@ repositories:
     lifecycle: active
     surfaces: [web, backend, production]
     eval_mode: native
+    eval_contract:
+      maturity: ci_gated
+      primary_suite: eval/delivery-loop/golden.yaml
+      command: uv run --project agents python eval/delivery-loop/run.py
+      evidence: ttar-report artifact
+      ci_workflow: .github/workflows/ci.yml
+      acceptance: TTAR success >=85%, fabrication rate =0, parse-JD success >=90%
+      privacy: synthetic_only
+      gap: promptfoo baseline is optional and model-backed jobs skip without a configured key
     ci_route: ops
     eval_route: signals
     release_route: build
@@ -55,6 +91,15 @@ repositories:
     lifecycle: active
     surfaces: [frontend, backend, production]
     eval_mode: native
+    eval_contract:
+      maturity: versioned_manual
+      primary_suite: eval/datasets/scenarios/
+      command: uv run python -m eval.ci.scoreboard --out docs/scoreboard.md --fail-under 10.5
+      evidence: eval/results/ and docs/scoreboard.md
+      ci_workflow: null
+      acceptance: scoreboard passes its declared threshold without dimension regression
+      privacy: synthetic_only
+      gap: the versioned scoreboard is not an explicit required CI check
     ci_route: ops
     eval_route: signals
     release_route: build
@@ -62,6 +107,15 @@ repositories:
     lifecycle: active
     surfaces: [ios, web, scheduled_content, testflight]
     eval_mode: tests_and_content_quality
+    eval_contract:
+      maturity: versioned_manual
+      primary_suite: apps/ios/SoloCompass/Tests/fixtures/user_stories.json
+      command: pnpm tsx scripts/eval-experience-prompt.ts
+      evidence: docs/EVAL_REPORT.md
+      ci_workflow: null
+      acceptance: all synthetic prompt cases pass and thin sources refuse safely
+      privacy: synthetic_only
+      gap: live-model prompt Eval and user-story rubrics are not CI-gated
     ci_route: ops
     eval_route: signals
     release_route: build
