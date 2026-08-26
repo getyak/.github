@@ -12,13 +12,21 @@ command -v jq >/dev/null || {
 
 org="${1:-getyak}"
 now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+concurrency="${PORTFOLIO_HEALTH_CONCURRENCY:-6}"
+if [[ ! "$concurrency" =~ ^[1-9][0-9]*$ ]] || ((concurrency > 16)); then
+  echo "PORTFOLIO_HEALTH_CONCURRENCY must be an integer from 1 to 16" >&2
+  exit 2
+fi
 if cutoff_epoch="$(date -u -v-7d +%s 2>/dev/null)"; then
   :
 else
   cutoff_epoch="$(date -u -d '7 days ago' +%s)"
 fi
 
-api_collection() {
+portfolio_output_dir="$(mktemp -d "${TMPDIR:-/tmp}/getyak-portfolio-health.XXXXXX")"
+trap 'rm -rf "$portfolio_output_dir"' EXIT
+
+portfolio_api_collection() {
   local endpoint="$1"
   local pages
   if pages="$(gh api --paginate --slurp "$endpoint" 2>/dev/null)"; then
@@ -28,10 +36,11 @@ api_collection() {
   fi
 }
 
-gh repo list "$org" --visibility public --no-archived --limit 200 \
-  --json nameWithOwner,isFork,defaultBranchRef,pushedAt \
-  --jq '.[] | select(.isFork == false) | @base64' |
-while IFS= read -r encoded; do
+portfolio_inspect_repo() {
+  local encoded="$1"
+  local repo_json repo branch pushed_at recent_runs
+  local dependabot code_scanning secret_scanning output_path
+
   repo_json="$(printf '%s' "$encoded" | base64 --decode)"
   repo="$(jq -r '.nameWithOwner' <<<"$repo_json")"
   branch="$(jq -r '.defaultBranchRef.name // ""' <<<"$repo_json")"
@@ -40,13 +49,14 @@ while IFS= read -r encoded; do
   recent_runs="$(gh run list -R "$repo" --limit 20 \
     --json databaseId,name,status,conclusion,event,createdAt,url 2>/dev/null || printf '[]')"
 
-  dependabot="$(api_collection \
+  dependabot="$(portfolio_api_collection \
     "repos/$repo/dependabot/alerts?state=open&per_page=100")"
-  code_scanning="$(api_collection \
+  code_scanning="$(portfolio_api_collection \
     "repos/$repo/code-scanning/alerts?state=open&per_page=100")"
-  secret_scanning="$(api_collection \
+  secret_scanning="$(portfolio_api_collection \
     "repos/$repo/secret-scanning/alerts?state=open&per_page=100")"
 
+  output_path="$portfolio_output_dir/${repo//\//__}.json"
   jq -cn \
     --arg observed_at "$now" \
     --argjson cutoff_epoch "$cutoff_epoch" \
@@ -80,5 +90,23 @@ while IFS= read -r encoded; do
         secret_scanning_state: $secret_scanning.state,
         secret_scanning: ($secret_scanning.items | length)
       }
-    }'
+    }' >"$output_path"
+}
+
+export -f portfolio_api_collection portfolio_inspect_repo
+export now cutoff_epoch portfolio_output_dir
+
+repo_records="$(gh repo list "$org" --visibility public --no-archived --limit 200 \
+  --json nameWithOwner,isFork,defaultBranchRef,pushedAt \
+  --jq '.[] | select(.isFork == false) | @base64')"
+
+if [[ -z "$repo_records" ]]; then
+  exit 0
+fi
+
+printf '%s\n' "$repo_records" \
+  | xargs -P "$concurrency" -n 1 bash -c 'portfolio_inspect_repo "$1"' _
+
+for output_path in "$portfolio_output_dir"/*.json; do
+  cat "$output_path"
 done
