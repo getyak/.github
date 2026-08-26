@@ -36,10 +36,21 @@ portfolio_api_collection() {
   fi
 }
 
+portfolio_api_object() {
+  local endpoint="$1"
+  local value
+  if value="$(gh api "$endpoint" 2>/dev/null)" && jq -e . >/dev/null 2>&1 <<<"$value"; then
+    jq -cn --argjson value "$value" '{state: "available", value: $value}'
+  else
+    printf '{"state":"unavailable","value":null}\n'
+  fi
+}
+
 portfolio_inspect_repo() {
   local encoded="$1"
   local repo_json repo branch pushed_at recent_runs
-  local dependabot code_scanning secret_scanning output_path
+  local dependabot code_scanning secret_scanning
+  local repository_settings actions_permissions workflow_permissions output_path
 
   repo_json="$(printf '%s' "$encoded" | base64 --decode)"
   repo="$(jq -r '.nameWithOwner' <<<"$repo_json")"
@@ -56,6 +67,9 @@ portfolio_inspect_repo() {
     "repos/$repo/code-scanning/alerts?state=open&per_page=100")"
   secret_scanning="$(portfolio_api_collection \
     "repos/$repo/secret-scanning/alerts?state=open&per_page=100")"
+  repository_settings="$(portfolio_api_object "repos/$repo")"
+  actions_permissions="$(portfolio_api_object "repos/$repo/actions/permissions")"
+  workflow_permissions="$(portfolio_api_object "repos/$repo/actions/permissions/workflow")"
 
   output_path="$portfolio_output_dir/${repo//\//__}.json"
   jq -cn \
@@ -68,6 +82,9 @@ portfolio_inspect_repo() {
     --argjson dependabot "$dependabot" \
     --argjson code_scanning "$code_scanning" \
     --argjson secret_scanning "$secret_scanning" \
+    --argjson repository_settings "$repository_settings" \
+    --argjson actions_permissions "$actions_permissions" \
+    --argjson workflow_permissions "$workflow_permissions" \
     '{
       observed_at: $observed_at,
       repository: $repository,
@@ -140,11 +157,50 @@ portfolio_inspect_repo() {
         ),
         secret_scanning_state: $secret_scanning.state,
         secret_scanning: ($secret_scanning.items | length)
-      }
+      },
+      security_configuration: {
+        repository_settings_state: $repository_settings.state,
+        secret_scanning: ($repository_settings.value.security_and_analysis.secret_scanning.status // "unknown"),
+        secret_scanning_push_protection: ($repository_settings.value.security_and_analysis.secret_scanning_push_protection.status // "unknown"),
+        dependabot_security_updates: ($repository_settings.value.security_and_analysis.dependabot_security_updates.status // "unknown"),
+        actions_permissions_state: $actions_permissions.state,
+        actions_enabled: ($actions_permissions.value.enabled // null),
+        actions_allowed: ($actions_permissions.value.allowed_actions // "unknown"),
+        actions_sha_pinning_required: ($actions_permissions.value.sha_pinning_required // false),
+        workflow_permissions_state: $workflow_permissions.state,
+        default_workflow_permissions: ($workflow_permissions.value.default_workflow_permissions // "unknown"),
+        actions_can_approve_pull_request_reviews: ($workflow_permissions.value.can_approve_pull_request_reviews // false)
+      },
+      configuration_drift: ([
+        if $repository_settings.state != "available" then
+          "repository_settings_unavailable"
+        else empty end,
+        if $repository_settings.state == "available" and
+          ($repository_settings.value.security_and_analysis.secret_scanning.status // "unknown") != "enabled"
+        then "secret_scanning_not_enabled" else empty end,
+        if $repository_settings.state == "available" and
+          ($repository_settings.value.security_and_analysis.secret_scanning_push_protection.status // "unknown") != "enabled"
+        then "secret_scanning_push_protection_not_enabled" else empty end,
+        if $repository_settings.state == "available" and
+          ($repository_settings.value.security_and_analysis.dependabot_security_updates.status // "unknown") != "enabled"
+        then "dependabot_security_updates_not_enabled" else empty end,
+        if $actions_permissions.state != "available" then
+          "actions_permissions_unavailable"
+        else empty end,
+        if $actions_permissions.state == "available" and
+          ($actions_permissions.value.sha_pinning_required // false) != true
+        then "actions_sha_pinning_not_required" else empty end,
+        if $workflow_permissions.state != "available" then
+          "workflow_permissions_unavailable"
+        else empty end,
+        if $workflow_permissions.state == "available" and
+          ($workflow_permissions.value.default_workflow_permissions // "unknown") != "read"
+        then "default_workflow_permissions_not_read" else empty end
+      ])
     }' >"$output_path"
 }
 
-export -f portfolio_api_collection portfolio_inspect_repo
+export -f portfolio_api_collection portfolio_api_object portfolio_inspect_repo
 export now cutoff_epoch portfolio_output_dir
 
 repo_records="$(gh repo list "$org" --visibility public --no-archived --limit 200 \

@@ -38,6 +38,15 @@ if [[ "$1" == "api" ]]; then
     endpoint="$argument"
   done
   case "$endpoint" in
+    repos/getyak/example/actions/permissions/workflow)
+      printf '%s\n' '{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}'
+      ;;
+    repos/getyak/example/actions/permissions)
+      printf '%s\n' '{"enabled":true,"allowed_actions":"all","sha_pinning_required":true}'
+      ;;
+    repos/getyak/example)
+      printf '%s\n' '{"security_and_analysis":{"secret_scanning":{"status":"enabled"},"secret_scanning_push_protection":{"status":"enabled"},"dependabot_security_updates":{"status":"enabled"}}}'
+      ;;
     */dependabot/alerts*)
       printf '%s\n' '[[{"security_advisory":{"severity":"high"}}]]'
       ;;
@@ -79,7 +88,14 @@ jq -e '
     low: 0,
     unknown: 1
   } and
-  .open_alerts.secret_scanning == 0
+  .open_alerts.secret_scanning == 0 and
+  .security_configuration.secret_scanning == "enabled" and
+  .security_configuration.secret_scanning_push_protection == "enabled" and
+  .security_configuration.dependabot_security_updates == "enabled" and
+  .security_configuration.actions_sha_pinning_required == true and
+  .security_configuration.default_workflow_permissions == "read" and
+  .security_configuration.actions_can_approve_pull_request_reviews == false and
+  .configuration_drift == []
 ' <<<"$snapshot" >/dev/null
 
 printf 'portfolio-health tests passed\n'
