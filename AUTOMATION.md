@@ -53,7 +53,10 @@ from automated Slack summaries.
   out of `#ops`. Security API state remains the authority for CodeQL,
   Dependabot, and secret-scanning coverage.
   Code-scanning output includes both total and severity counts so high or
-  critical debt cannot be hidden by a portfolio-wide total.
+  critical debt cannot be hidden by a portfolio-wide total. The
+  `configuration_drift` field also reports missing secret scanning, push
+  protection, Dependabot security updates, immutable Action pins, or read-only
+  default workflow permissions.
 - Use [`automation/prompts/daily-ops.md`](automation/prompts/daily-ops.md) for
   daily CI, dependency, security, and host triage.
 - Use [`automation/prompts/weekly-eval.md`](automation/prompts/weekly-eval.md)
