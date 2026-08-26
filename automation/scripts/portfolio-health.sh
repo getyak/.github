@@ -47,7 +47,8 @@ portfolio_inspect_repo() {
   pushed_at="$(jq -r '.pushedAt // ""' <<<"$repo_json")"
 
   recent_runs="$(gh run list -R "$repo" --limit 20 \
-    --json databaseId,name,status,conclusion,event,createdAt,url 2>/dev/null || printf '[]')"
+    --json databaseId,name,status,conclusion,event,headBranch,headSha,createdAt,url \
+    2>/dev/null || printf '[]')"
 
   dependabot="$(portfolio_api_collection \
     "repos/$repo/dependabot/alerts?state=open&per_page=100")"
@@ -73,10 +74,36 @@ portfolio_inspect_repo() {
       default_branch: $default_branch,
       pushed_at: $pushed_at,
       latest_run: ($recent_runs[0] // null),
-      recent_failed_runs: ([
+      latest_default_branch_run: ([
         $recent_runs[]?
-        | select(.conclusion == "failure")
-        | select((.createdAt | fromdateiso8601) >= $cutoff_epoch)
+        | select((.headBranch // "") == $default_branch)
+        | select(.event != "pull_request" and .event != "dynamic")
+      ][0] // null),
+      failure_filter: "latest_decisive_default_branch_non_dynamic",
+      recent_failed_runs: ([
+        $recent_runs[]? as $failed
+        | select($failed.conclusion == "failure")
+        | select(($failed.createdAt | fromdateiso8601) >= $cutoff_epoch)
+        | select(($failed.headBranch // "") == $default_branch)
+        | select($failed.event != "pull_request" and $failed.event != "dynamic")
+        | select(([
+            $recent_runs[]? as $later
+            | select($later.name == $failed.name)
+            | select(($later.headBranch // "") == ($failed.headBranch // ""))
+            | select($later.event == $failed.event)
+            | select(
+                $later.conclusion == "failure" or
+                $later.conclusion == "success"
+              )
+            | select(
+                $later.createdAt > $failed.createdAt or
+                (
+                  $later.createdAt == $failed.createdAt and
+                  $later.databaseId > $failed.databaseId
+                )
+              )
+          ] | length) == 0)
+        | $failed
       ]),
       open_alerts: {
         dependabot_state: $dependabot.state,
@@ -87,6 +114,30 @@ portfolio_inspect_repo() {
         ] | length),
         code_scanning_state: $code_scanning.state,
         code_scanning: ($code_scanning.items | length),
+        code_scanning_high_or_critical: ([
+          $code_scanning.items[]?
+          | select(
+              .rule.security_severity_level == "high" or
+              .rule.security_severity_level == "critical"
+            )
+        ] | length),
+        code_scanning_by_severity: (
+          reduce $code_scanning.items[]? as $alert (
+            {critical: 0, high: 0, medium: 0, low: 0, unknown: 0};
+            ($alert.rule.security_severity_level // "unknown") as $severity
+            | if $severity == "critical" then
+                .critical += 1
+              elif $severity == "high" then
+                .high += 1
+              elif $severity == "medium" then
+                .medium += 1
+              elif $severity == "low" then
+                .low += 1
+              else
+                .unknown += 1
+              end
+          )
+        ),
         secret_scanning_state: $secret_scanning.state,
         secret_scanning: ($secret_scanning.items | length)
       }

@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repository_root="$(cd "$(dirname "$BASH_SOURCE")/../.." && pwd)"
+test_root="$(mktemp -d /tmp/portfolio-health-test.XXXXXX)"
+trap 'rm -rf "$test_root"' EXIT
+
+mkdir -p "$test_root/bin"
+cat >"$test_root/bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$1 $2" == "repo list" ]]; then
+  printf '%s' '{"nameWithOwner":"getyak/example","isFork":false,"defaultBranchRef":{"name":"main"},"pushedAt":"2999-01-01T00:00:00Z"}' | base64
+  printf '\n'
+  exit 0
+fi
+
+if [[ "$1 $2" == "run list" ]]; then
+  cat <<'JSON'
+[
+  {"databaseId":8,"name":"Web","status":"completed","conclusion":"failure","event":"pull_request","headBranch":"feature","headSha":"8","createdAt":"2999-01-08T21:00:00Z","url":"https://example.invalid/runs/8"},
+  {"databaseId":7,"name":"CI","status":"completed","conclusion":"success","event":"push","headBranch":"main","headSha":"7","createdAt":"2999-01-08T20:30:00Z","url":"https://example.invalid/runs/7"},
+  {"databaseId":6,"name":"CI","status":"completed","conclusion":"failure","event":"push","headBranch":"main","headSha":"6","createdAt":"2999-01-08T20:00:00Z","url":"https://example.invalid/runs/6"},
+  {"databaseId":5,"name":"Deploy","status":"completed","conclusion":"failure","event":"push","headBranch":"main","headSha":"5","createdAt":"2999-01-08T19:30:00Z","url":"https://example.invalid/runs/5"},
+  {"databaseId":4,"name":"Deploy","status":"completed","conclusion":"failure","event":"push","headBranch":"main","headSha":"4","createdAt":"2999-01-08T19:00:00Z","url":"https://example.invalid/runs/4"},
+  {"databaseId":3,"name":"Nightly","status":"completed","conclusion":"failure","event":"schedule","headBranch":"main","headSha":"3","createdAt":"2999-01-08T18:30:00Z","url":"https://example.invalid/runs/3"},
+  {"databaseId":2,"name":"Docs","status":"completed","conclusion":"failure","event":"push","headBranch":"docs","headSha":"2","createdAt":"2999-01-08T18:00:00Z","url":"https://example.invalid/runs/2"},
+  {"databaseId":1,"name":"Dependency update","status":"completed","conclusion":"failure","event":"dynamic","headBranch":"main","headSha":"1","createdAt":"2999-01-08T17:30:00Z","url":"https://example.invalid/runs/1"}
+]
+JSON
+  exit 0
+fi
+
+if [[ "$1" == "api" ]]; then
+  endpoint=""
+  for argument in "$@"; do
+    endpoint="$argument"
+  done
+  case "$endpoint" in
+    */dependabot/alerts*)
+      printf '%s\n' '[[{"security_advisory":{"severity":"high"}}]]'
+      ;;
+    */code-scanning/alerts*)
+      printf '%s\n' '[[{"rule":{"security_severity_level":"critical"}},{"rule":{"security_severity_level":"high"}},{"rule":{"security_severity_level":"medium"}},{"rule":{}}]]'
+      ;;
+    */secret-scanning/alerts*)
+      printf '%s\n' '[[]]'
+      ;;
+    *)
+      exit 1
+      ;;
+  esac
+  exit 0
+fi
+
+exit 1
+MOCK
+chmod +x "$test_root/bin/gh"
+
+snapshot="$(
+  PATH="$test_root/bin:$PATH" \
+    PORTFOLIO_HEALTH_CONCURRENCY=1 \
+    "$repository_root/automation/scripts/portfolio-health.sh" getyak
+)"
+
+jq -e '
+  .repository == "getyak/example" and
+  .failure_filter == "latest_decisive_default_branch_non_dynamic" and
+  .latest_default_branch_run.databaseId == 7 and
+  ([.recent_failed_runs[].databaseId] == [5, 3]) and
+  .open_alerts.dependabot_high_or_critical == 1 and
+  .open_alerts.code_scanning == 4 and
+  .open_alerts.code_scanning_high_or_critical == 2 and
+  .open_alerts.code_scanning_by_severity == {
+    critical: 1,
+    high: 1,
+    medium: 1,
+    low: 0,
+    unknown: 1
+  } and
+  .open_alerts.secret_scanning == 0
+' <<<"$snapshot" >/dev/null
+
+printf 'portfolio-health tests passed\n'
