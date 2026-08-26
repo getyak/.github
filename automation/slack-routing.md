@@ -86,6 +86,36 @@ action and target. A reaction alone is insufficient.
 - Use **GitHub in Slack** for linked pull-request and run context. Prefer the
   native artifact link over mirroring every GitHub event into Slack.
 
+### Integration topology
+
+- Install the Codex Slack app only in `#build`. Its GitHub App and Cloud
+  environments may access public product repositories listed in the registry,
+  but never private signing or credential repositories.
+- Keep ChatGPT available for deliberate synthesis and Canvas work. Do not add
+  automatic ChatGPT responses to incident channels.
+- Link the GitHub Slack app to the public Getyak repositories for rich previews
+  and operator commands. In `#build`, subscribe only to `pulls`, `reviews`,
+  `releases`, and deployment approvals for actively maintained products.
+- Do not subscribe `#ops` to unfiltered `workflows`, `commits`, or every
+  repository event. The control loop owns failure-only workflow routing because
+  the native workflow subscription reports successful runs too.
+- A Codex request must name one repository and one verifiable outcome. The
+  resulting pull request is the durable artifact; discussion and approval stay
+  in the originating Slack thread.
+
+### Persistent-access checklist
+
+Before an operator installs or reconnects an integration, record and review:
+
+1. the Slack channels the app can read or post to;
+2. the exact GitHub repositories the app can access;
+3. whether write, workflow, pull-request, or deployment permissions are needed;
+4. the human approval boundary and revocation owner; and
+5. an end-to-end test that creates no production deployment or secret change.
+
+Use selected-repository access. Re-run this review when a repository becomes
+private, begins storing signing material, or changes ownership.
+
 ## Retention and redaction
 
 Never paste secrets, signing material, full environment dumps, raw user data,
