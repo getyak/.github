@@ -42,7 +42,11 @@ Every automation follows the same loop:
 The public portfolio and its routing metadata live in
 [`automation/registry.yml`](automation/registry.yml). Private credential and
 signing repositories are deliberately excluded from that public registry and
-from automated Slack summaries.
+from automated Slack summaries. Every active product also declares an
+`eval_contract` with a maturity level, primary suite, reproducible command,
+evidence location, CI workflow (when present), acceptance statement, privacy
+boundary, and explicit coverage gap. These fields guide discovery; the product
+repository and immutable run artifacts remain the source of truth.
 
 ## Operator entry points
 
@@ -57,6 +61,9 @@ from automated Slack summaries.
   `configuration_drift` field also reports missing secret scanning, push
   protection, Dependabot security updates, immutable Action pins, or read-only
   default workflow permissions.
+- Run `automation/scripts/registry.test.sh` after changing repository
+  lifecycle or Eval metadata. Every active product must keep a complete,
+  machine-readable Eval discovery contract.
 - Use [`automation/prompts/daily-ops.md`](automation/prompts/daily-ops.md) for
   daily CI, dependency, security, and host triage.
 - Use [`automation/prompts/weekly-eval.md`](automation/prompts/weekly-eval.md)
