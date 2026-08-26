@@ -8,7 +8,8 @@ Run once on weekdays in `Asia/Shanghai`. This is a read-mostly control loop.
    checks with GitHub CLI for every public, non-archived repository.
 3. Inspect only newly failing or still-unresolved workflow runs, deployment
    failures, high/critical Dependabot alerts, code-scanning alerts, and missing
-   security coverage. Inspect failure steps before classifying them.
+   security coverage. Treat `recent_failed_runs` as default-branch candidates,
+   not proof of an incident, and inspect failure steps before classifying them.
 4. Check the automation host for disk pressure, memory pressure, unhealthy
    containers, stopped required services, and expiring certificates. Never
    include secret values or private data in output.

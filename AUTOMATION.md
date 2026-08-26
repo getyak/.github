@@ -47,7 +47,13 @@ from automated Slack summaries.
 ## Operator entry points
 
 - Run `automation/scripts/portfolio-health.sh` for a read-only JSON Lines
-  snapshot of current public-repository health.
+  snapshot of current public-repository health. Its `recent_failed_runs` field
+  contains only the latest decisive failure for each workflow on the default
+  branch; superseded, pull-request-only, and GitHub-internal dynamic runs stay
+  out of `#ops`. Security API state remains the authority for CodeQL,
+  Dependabot, and secret-scanning coverage.
+  Code-scanning output includes both total and severity counts so high or
+  critical debt cannot be hidden by a portfolio-wide total.
 - Use [`automation/prompts/daily-ops.md`](automation/prompts/daily-ops.md) for
   daily CI, dependency, security, and host triage.
 - Use [`automation/prompts/weekly-eval.md`](automation/prompts/weekly-eval.md)
