@@ -67,6 +67,11 @@ repository and immutable run artifacts remain the source of truth.
 - Run `automation/scripts/registry.test.sh` after changing repository
   lifecycle or Eval metadata. Every active product must keep a complete,
   machine-readable Eval discovery contract.
+- Run `automation/scripts/eval-health.sh` before the weekly Eval review. It
+  proves the declared suite and workflow exist on the default branch, finds a
+  successful run where the exact Eval job and step actually executed, verifies
+  the declared artifact when required, and emits `complete`, `partial`, or
+  `invalid` JSON Lines without reading secrets.
 - Use [`automation/prompts/daily-ops.md`](automation/prompts/daily-ops.md) for
   daily CI, dependency, security, and host triage.
 - Use [`automation/prompts/weekly-eval.md`](automation/prompts/weekly-eval.md)
