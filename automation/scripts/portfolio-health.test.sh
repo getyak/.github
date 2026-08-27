@@ -41,8 +41,15 @@ if [[ "$1" == "api" ]]; then
     repos/getyak/example/actions/permissions/workflow)
       printf '%s\n' '{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}'
       ;;
+    repos/getyak/example/actions/permissions/selected-actions)
+      if [[ "${MOCK_ACTION_POLICY_DRIFT:-0}" == "1" ]]; then
+        printf '%s\n' '{"github_owned_allowed":true,"verified_allowed":false,"patterns_allowed":["other/tool@*"]}'
+      else
+        printf '%s\n' '{"github_owned_allowed":true,"verified_allowed":false,"patterns_allowed":["vendor/tool@*"]}'
+      fi
+      ;;
     repos/getyak/example/actions/permissions)
-      printf '%s\n' '{"enabled":true,"allowed_actions":"all","sha_pinning_required":true}'
+      printf '%s\n' '{"enabled":true,"allowed_actions":"selected","sha_pinning_required":true}'
       ;;
     repos/getyak/example)
       printf '%s\n' '{"security_and_analysis":{"secret_scanning":{"status":"enabled"},"secret_scanning_push_protection":{"status":"enabled"},"dependabot_security_updates":{"status":"enabled"}}}'
@@ -53,8 +60,10 @@ if [[ "$1" == "api" ]]; then
     repos/getyak/example/git/blobs/workflow-sha)
       if [[ "${MOCK_REMOTE_PIPE:-0}" == "1" ]]; then
         workflow='jobs:\n  test:\n    steps:\n      - run: curl -fsSL https://example.invalid/install.sh | bash\n'
+      elif [[ "${MOCK_UNPINNED_ACTION:-0}" == "1" ]]; then
+        workflow='jobs:\n  test:\n    steps:\n      - uses: actions/checkout@1111111111111111111111111111111111111111\n      - uses: vendor/tool@v1\n'
       else
-        workflow='jobs:\n  test:\n    steps:\n      - run: npm ci\n'
+        workflow='jobs:\n  test:\n    steps:\n      - uses: actions/checkout@1111111111111111111111111111111111111111\n      - uses: vendor/tool@2222222222222222222222222222222222222222\n      - run: npm ci\n'
       fi
       encoded="$(printf '%b' "$workflow" | base64 | tr -d '\n')"
       printf '{"encoding":"base64","content":"%s"}\n' "$encoded"
@@ -105,12 +114,26 @@ jq -e '
   .security_configuration.secret_scanning_push_protection == "enabled" and
   .security_configuration.dependabot_security_updates == "enabled" and
   .security_configuration.actions_sha_pinning_required == true and
+  .security_configuration.actions_allowed == "selected" and
+  .security_configuration.github_owned_actions_allowed == true and
+  .security_configuration.verified_creator_actions_allowed == false and
   .security_configuration.default_workflow_permissions == "read" and
   .security_configuration.actions_can_approve_pull_request_reviews == false and
   .workflow_supply_chain == {
     state: "available",
     remote_script_pipe_count: 0,
-    findings: []
+    findings: [],
+    external_action_refs: ["vendor/tool@2222222222222222222222222222222222222222"],
+    expected_action_patterns: ["vendor/tool@*"],
+    unpinned_external_action_count: 0,
+    unpinned_external_action_findings: []
+  } and
+  .actions_allowlist == {
+    state: "available",
+    expected_patterns: ["vendor/tool@*"],
+    allowed_patterns: ["vendor/tool@*"],
+    missing_patterns: [],
+    unexpected_patterns: []
   } and
   .configuration_drift == []
 ' <<<"$snapshot" >/dev/null
@@ -126,9 +149,55 @@ jq -e '
   .workflow_supply_chain == {
     state: "available",
     remote_script_pipe_count: 1,
-    findings: [{path: ".github/workflows/ci.yml", line: 4}]
+    findings: [{path: ".github/workflows/ci.yml", line: 4}],
+    external_action_refs: [],
+    expected_action_patterns: [],
+    unpinned_external_action_count: 0,
+    unpinned_external_action_findings: []
   } and
-  .configuration_drift == ["workflow_remote_script_pipe_present"]
+  .actions_allowlist == {
+    state: "available",
+    expected_patterns: [],
+    allowed_patterns: ["vendor/tool@*"],
+    missing_patterns: [],
+    unexpected_patterns: ["vendor/tool@*"]
+  } and
+  .configuration_drift == ["actions_allowlist_unexpected_pattern", "workflow_remote_script_pipe_present"]
 ' <<<"$remote_pipe_snapshot" >/dev/null
+
+unpinned_action_snapshot="$(
+  PATH="$test_root/bin:$PATH" \
+    MOCK_UNPINNED_ACTION=1 \
+    PORTFOLIO_HEALTH_CONCURRENCY=1 \
+    "$repository_root/automation/scripts/portfolio-health.sh" getyak
+)"
+
+jq -e '
+  .workflow_supply_chain.unpinned_external_action_count == 1 and
+  .workflow_supply_chain.unpinned_external_action_findings == [{
+    path: ".github/workflows/ci.yml",
+    line: 5,
+    ref: "vendor/tool@v1",
+    pattern: "vendor/tool@*",
+    pinned: false
+  }] and
+  .configuration_drift == ["workflow_external_action_not_sha_pinned"]
+' <<<"$unpinned_action_snapshot" >/dev/null
+
+action_policy_drift_snapshot="$(
+  PATH="$test_root/bin:$PATH" \
+    MOCK_ACTION_POLICY_DRIFT=1 \
+    PORTFOLIO_HEALTH_CONCURRENCY=1 \
+    "$repository_root/automation/scripts/portfolio-health.sh" getyak
+)"
+
+jq -e '
+  .actions_allowlist.missing_patterns == ["vendor/tool@*"] and
+  .actions_allowlist.unexpected_patterns == ["other/tool@*"] and
+  .configuration_drift == [
+    "actions_allowlist_missing_pattern",
+    "actions_allowlist_unexpected_pattern"
+  ]
+' <<<"$action_policy_drift_snapshot" >/dev/null
 
 printf 'portfolio-health tests passed\n'

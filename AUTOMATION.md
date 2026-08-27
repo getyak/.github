@@ -60,10 +60,15 @@ repository and immutable run artifacts remain the source of truth.
   critical debt cannot be hidden by a portfolio-wide total. The
   `configuration_drift` field also reports missing secret scanning, push
   protection, Dependabot security updates, immutable Action pins, or read-only
-  default workflow permissions. The `workflow_supply_chain` field also scans
-  default-branch workflow sources for remote scripts piped directly into a
-  shell (including shell process substitution); scan failures and matches are
-  configuration drift rather than a silent clean result.
+  default workflow permissions. It also verifies that each repository permits
+  only GitHub-owned Actions plus the exact external Action repositories used on
+  its default branch. External references must remain pinned to full commit
+  SHAs; the allowlist uses `owner/action@*` so Dependabot can propose a new SHA
+  without granting a new vendor. Missing, stale, or broadly verified-creator
+  allowlist entries are configuration drift. The `workflow_supply_chain` field
+  also scans default-branch workflow sources for remote scripts piped directly
+  into a shell (including shell process substitution); scan failures and
+  matches are configuration drift rather than a silent clean result.
 - Run `automation/scripts/registry.test.sh` after changing repository
   lifecycle or Eval metadata. Every active product must keep a complete,
   machine-readable Eval discovery contract.
