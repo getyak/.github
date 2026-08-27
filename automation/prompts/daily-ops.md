@@ -8,9 +8,13 @@ Run once on weekdays in `Asia/Shanghai`. This is a read-mostly control loop.
    checks with GitHub CLI for every public, non-archived repository.
 3. Review `configuration_drift`. Secret scanning, push protection, Dependabot
    security updates, read-only default workflow permissions, and immutable
-   Action SHA enforcement are the expected public-repository baseline. Treat
-   an unavailable `workflow_supply_chain` scan or any remote script piped
-   directly into a shell as configuration drift requiring inspection.
+   Action SHA enforcement are the expected public-repository baseline. Each
+   repository must allow only GitHub-owned Actions plus the exact external
+   Action repositories its default branch uses; verified creators are not a
+   blanket exception. Treat missing or stale allowlist entries, an unavailable
+   `workflow_supply_chain` scan, an unpinned external Action, or any remote
+   script piped directly into a shell as configuration drift requiring
+   inspection.
 4. Inspect only newly failing or still-unresolved workflow runs, deployment
    failures, high/critical Dependabot alerts, code-scanning alerts, and missing
    security coverage. Treat `recent_failed_runs` as default-branch candidates,

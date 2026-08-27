@@ -9,6 +9,10 @@ command -v jq >/dev/null || {
   echo "jq is required" >&2
   exit 2
 }
+command -v ruby >/dev/null || {
+  echo "ruby is required" >&2
+  exit 2
+}
 
 org="${1:-getyak}"
 now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -50,12 +54,14 @@ portfolio_workflow_supply_chain() {
   local repo="$1"
   local branch="$2"
   local tree_json workflow_records workflow_path blob_sha blob_json content matches line_number
+  local action_lines action_line action_ref action_pattern action_pinned
   local findings='[]'
+  local action_findings='[]'
 
   if [[ -z "$branch" ]] ||
     ! tree_json="$(gh api "repos/$repo/git/trees/$branch?recursive=1" 2>/dev/null)" ||
     ! jq -e '.truncated != true and (.tree | type == "array")' >/dev/null 2>&1 <<<"$tree_json"; then
-    printf '{"state":"unavailable","remote_script_pipe_count":0,"findings":[]}\n'
+    printf '{"state":"unavailable","remote_script_pipe_count":0,"findings":[],"external_action_refs":[],"expected_action_patterns":[],"unpinned_external_action_count":0,"unpinned_external_action_findings":[]}\n'
     return
   fi
 
@@ -74,7 +80,7 @@ portfolio_workflow_supply_chain() {
       ! content="$(jq -r 'select(.encoding == "base64") | .content // empty' <<<"$blob_json" \
         | tr -d '\r\n' \
         | base64 --decode 2>/dev/null)"; then
-      printf '{"state":"unavailable","remote_script_pipe_count":0,"findings":[]}\n'
+      printf '{"state":"unavailable","remote_script_pipe_count":0,"findings":[],"external_action_refs":[],"expected_action_patterns":[],"unpinned_external_action_count":0,"unpinned_external_action_findings":[]}\n'
       return
     fi
 
@@ -114,12 +120,43 @@ portfolio_workflow_supply_chain() {
         --argjson line "$line_number" \
         '$findings + [{path: $path, line: $line}]')"
     done <<<"$matches"
+
+    action_lines="$(ruby -ne '
+      if (match = $_.match(%r{^\s*-?\s*uses:\s*["\x27]?([^\s#"\x27]+)}))
+        puts "#{$.}\t#{match[1]}"
+      end
+    ' <<<"$content")"
+
+    while IFS=$'\t' read -r action_line action_ref; do
+      [[ -n "$action_line" && -n "$action_ref" ]] || continue
+      case "$action_ref" in
+        ./* | docker://* | actions/* | github/*) continue ;;
+      esac
+
+      action_pattern="${action_ref%@*}@*"
+      action_pinned=false
+      if [[ "$action_ref" =~ @[0-9a-f]{40}$ ]]; then
+        action_pinned=true
+      fi
+      action_findings="$(jq -cn \
+        --argjson findings "$action_findings" \
+        --arg path "$workflow_path" \
+        --argjson line "$action_line" \
+        --arg ref "$action_ref" \
+        --arg pattern "$action_pattern" \
+        --argjson pinned "$action_pinned" \
+        '$findings + [{path: $path, line: $line, ref: $ref, pattern: $pattern, pinned: $pinned}]')"
+    done <<<"$action_lines"
   done <<<"$workflow_records"
 
-  jq -cn --argjson findings "$findings" '{
+  jq -cn --argjson findings "$findings" --argjson action_findings "$action_findings" '{
     state: "available",
     remote_script_pipe_count: ($findings | length),
-    findings: $findings
+    findings: $findings,
+    external_action_refs: ([$action_findings[].ref] | unique),
+    expected_action_patterns: ([$action_findings[].pattern] | unique),
+    unpinned_external_action_count: ([$action_findings[] | select(.pinned != true)] | length),
+    unpinned_external_action_findings: ([$action_findings[] | select(.pinned != true)])
   }'
 }
 
@@ -127,7 +164,7 @@ portfolio_inspect_repo() {
   local encoded="$1"
   local repo_json repo branch pushed_at recent_runs
   local dependabot code_scanning secret_scanning
-  local repository_settings actions_permissions workflow_permissions workflow_supply_chain output_path
+  local repository_settings actions_permissions selected_actions workflow_permissions workflow_supply_chain output_path
 
   repo_json="$(printf '%s' "$encoded" | base64 --decode)"
   repo="$(jq -r '.nameWithOwner' <<<"$repo_json")"
@@ -146,6 +183,11 @@ portfolio_inspect_repo() {
     "repos/$repo/secret-scanning/alerts?state=open&per_page=100")"
   repository_settings="$(portfolio_api_object "repos/$repo")"
   actions_permissions="$(portfolio_api_object "repos/$repo/actions/permissions")"
+  if [[ "$(jq -r '.value.allowed_actions // ""' <<<"$actions_permissions")" == "selected" ]]; then
+    selected_actions="$(portfolio_api_object "repos/$repo/actions/permissions/selected-actions")"
+  else
+    selected_actions='{"state":"not_applicable","value":null}'
+  fi
   workflow_permissions="$(portfolio_api_object "repos/$repo/actions/permissions/workflow")"
   workflow_supply_chain="$(portfolio_workflow_supply_chain "$repo" "$branch")"
 
@@ -162,9 +204,14 @@ portfolio_inspect_repo() {
     --argjson secret_scanning "$secret_scanning" \
     --argjson repository_settings "$repository_settings" \
     --argjson actions_permissions "$actions_permissions" \
+    --argjson selected_actions "$selected_actions" \
     --argjson workflow_permissions "$workflow_permissions" \
     --argjson workflow_supply_chain "$workflow_supply_chain" \
-    '{
+    '($selected_actions.value.patterns_allowed // []) as $allowed_action_patterns |
+    ($workflow_supply_chain.expected_action_patterns // []) as $expected_action_patterns |
+    ([$expected_action_patterns[] as $pattern | select(($allowed_action_patterns | index($pattern)) == null) | $pattern]) as $missing_action_patterns |
+    ([$allowed_action_patterns[] as $pattern | select(($expected_action_patterns | index($pattern)) == null) | $pattern]) as $unexpected_action_patterns |
+    {
       observed_at: $observed_at,
       repository: $repository,
       default_branch: $default_branch,
@@ -246,11 +293,27 @@ portfolio_inspect_repo() {
         actions_enabled: ($actions_permissions.value.enabled // null),
         actions_allowed: ($actions_permissions.value.allowed_actions // "unknown"),
         actions_sha_pinning_required: ($actions_permissions.value.sha_pinning_required // false),
+        selected_actions_state: $selected_actions.state,
+        github_owned_actions_allowed: ($selected_actions.value.github_owned_allowed // null),
+        verified_creator_actions_allowed: (
+          if ($selected_actions.value | type) == "object" and
+            ($selected_actions.value | has("verified_allowed"))
+          then $selected_actions.value.verified_allowed
+          else null end
+        ),
+        allowed_action_patterns: $allowed_action_patterns,
         workflow_permissions_state: $workflow_permissions.state,
         default_workflow_permissions: ($workflow_permissions.value.default_workflow_permissions // "unknown"),
         actions_can_approve_pull_request_reviews: ($workflow_permissions.value.can_approve_pull_request_reviews // false)
       },
       workflow_supply_chain: $workflow_supply_chain,
+      actions_allowlist: {
+        state: $selected_actions.state,
+        expected_patterns: $expected_action_patterns,
+        allowed_patterns: $allowed_action_patterns,
+        missing_patterns: $missing_action_patterns,
+        unexpected_patterns: $unexpected_action_patterns
+      },
       configuration_drift: ([
         if $repository_settings.state != "available" then
           "repository_settings_unavailable"
@@ -270,6 +333,30 @@ portfolio_inspect_repo() {
         if $actions_permissions.state == "available" and
           ($actions_permissions.value.sha_pinning_required // false) != true
         then "actions_sha_pinning_not_required" else empty end,
+        if $actions_permissions.state == "available" and
+          ($actions_permissions.value.allowed_actions // "unknown") != "selected"
+        then "actions_allowlist_not_selected" else empty end,
+        if $actions_permissions.state == "available" and
+          ($actions_permissions.value.allowed_actions // "unknown") == "selected" and
+          $selected_actions.state != "available"
+        then "actions_selected_policy_unavailable" else empty end,
+        if $selected_actions.state == "available" and
+          ($selected_actions.value.github_owned_allowed // false) != true
+        then "github_owned_actions_not_allowed" else empty end,
+        if $selected_actions.state == "available" and
+          ($selected_actions.value.verified_allowed // false) != false
+        then "verified_creator_actions_broadly_allowed" else empty end,
+        if $workflow_supply_chain.state == "available" and
+          ($workflow_supply_chain.unpinned_external_action_count // 0) > 0
+        then "workflow_external_action_not_sha_pinned" else empty end,
+        if $workflow_supply_chain.state == "available" and
+          $selected_actions.state == "available" and
+          ($missing_action_patterns | length) > 0
+        then "actions_allowlist_missing_pattern" else empty end,
+        if $workflow_supply_chain.state == "available" and
+          $selected_actions.state == "available" and
+          ($unexpected_action_patterns | length) > 0
+        then "actions_allowlist_unexpected_pattern" else empty end,
         if $workflow_permissions.state != "available" then
           "workflow_permissions_unavailable"
         else empty end,
