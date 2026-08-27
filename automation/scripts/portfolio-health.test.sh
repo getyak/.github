@@ -54,6 +54,16 @@ if [[ "$1" == "api" ]]; then
     repos/getyak/example)
       printf '%s\n' '{"security_and_analysis":{"secret_scanning":{"status":"enabled"},"secret_scanning_push_protection":{"status":"enabled"},"dependabot_security_updates":{"status":"enabled"}}}'
       ;;
+    'repos/getyak/example/rulesets?includes_parents=true')
+      if [[ "${MOCK_RULESET_DRIFT:-0}" == "1" ]]; then
+        printf '%s\n' '[]'
+      else
+        printf '%s\n' '[{"id":42,"name":"Default branch safety","target":"branch","enforcement":"active"}]'
+      fi
+      ;;
+    repos/getyak/example/rulesets/42)
+      printf '%s\n' '{"id":42,"name":"Default branch safety","target":"branch","source_type":"Repository","enforcement":"active","bypass_actors":[{"actor_id":null,"actor_type":"OrganizationAdmin","bypass_mode":"always"}],"conditions":{"ref_name":{"exclude":[],"include":["~DEFAULT_BRANCH"]}},"rules":[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"required_review_thread_resolution":true,"require_extra_approval_for_unattributed_changes":true}}]}'
+      ;;
     'repos/getyak/example/git/trees/main?recursive=1')
       printf '%s\n' '{"truncated":false,"tree":[{"path":".github/workflows/ci.yml","type":"blob","sha":"workflow-sha"}]}'
       ;;
@@ -119,6 +129,19 @@ jq -e '
   .security_configuration.verified_creator_actions_allowed == false and
   .security_configuration.default_workflow_permissions == "read" and
   .security_configuration.actions_can_approve_pull_request_reviews == false and
+  .default_branch_ruleset == {
+    state: "available",
+    matching_count: 1,
+    qualifying_count: 1,
+    qualifying_rulesets: [{
+      id: 42,
+      name: "Default branch safety",
+      source_type: "Repository",
+      gate: "pull_request"
+    }],
+    insufficient_rulesets: [],
+    unexpected_bypass_actors: []
+  } and
   .workflow_supply_chain == {
     state: "available",
     remote_script_pipe_count: 0,
@@ -199,5 +222,24 @@ jq -e '
     "actions_allowlist_unexpected_pattern"
   ]
 ' <<<"$action_policy_drift_snapshot" >/dev/null
+
+ruleset_drift_snapshot="$(
+  PATH="$test_root/bin:$PATH" \
+    MOCK_RULESET_DRIFT=1 \
+    PORTFOLIO_HEALTH_CONCURRENCY=1 \
+    "$repository_root/automation/scripts/portfolio-health.sh" getyak
+)"
+
+jq -e '
+  .default_branch_ruleset == {
+    state: "available",
+    matching_count: 0,
+    qualifying_count: 0,
+    qualifying_rulesets: [],
+    insufficient_rulesets: [],
+    unexpected_bypass_actors: []
+  } and
+  .configuration_drift == ["default_branch_ruleset_missing"]
+' <<<"$ruleset_drift_snapshot" >/dev/null
 
 printf 'portfolio-health tests passed\n'
