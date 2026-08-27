@@ -37,6 +37,13 @@ if [[ "$1" == "api" ]]; then
   for argument in "$@"; do
     endpoint="$argument"
   done
+  if [[ "${MOCK_TRANSIENT_API_ONCE:-0}" == "1" &&
+    "$endpoint" == "repos/getyak/example/git/trees/main?recursive=1" &&
+    ! -e "${MOCK_TRANSIENT_API_STATE_FILE:?}" ]]; then
+    : >"$MOCK_TRANSIENT_API_STATE_FILE"
+    printf 'not-json\n'
+    exit 0
+  fi
   case "$endpoint" in
     repos/getyak/example/actions/permissions/workflow)
       printf '%s\n' '{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}'
@@ -160,6 +167,20 @@ jq -e '
   } and
   .configuration_drift == []
 ' <<<"$snapshot" >/dev/null
+
+transient_api_snapshot="$(
+  PATH="$test_root/bin:$PATH" \
+    MOCK_TRANSIENT_API_ONCE=1 \
+    MOCK_TRANSIENT_API_STATE_FILE="$test_root/transient-api-seen" \
+    PORTFOLIO_HEALTH_API_RETRY_DELAY_SECONDS=0 \
+    PORTFOLIO_HEALTH_CONCURRENCY=1 \
+    "$repository_root/automation/scripts/portfolio-health.sh" getyak
+)"
+
+jq -e '
+  .workflow_supply_chain.state == "available" and
+  .configuration_drift == []
+' <<<"$transient_api_snapshot" >/dev/null
 
 remote_pipe_snapshot="$(
   PATH="$test_root/bin:$PATH" \
