@@ -103,8 +103,10 @@ message that names the action and target. A reaction alone is insufficient.
 ## Codex and ChatGPT roles
 
 - Use **Codex in `#build`** for repository-scoped diagnosis, implementation,
-  tests, and pull requests. Start from a message containing the repository,
-  desired outcome, constraints, and evidence URL.
+  tests, and pull requests. Start from a task that passes
+  `automation/scripts/codex-task-lint.sh`; the repository, environment, source
+  thread, fingerprint, outcome, evidence, constraints, acceptance, recovery,
+  and human boundary are all mandatory.
 - Use **ChatGPT** for cross-channel synthesis, canvases, and decision summaries.
   Keep it out of private or data-heavy channels unless the task requires that
   context and the access is explicitly approved.
@@ -116,6 +118,9 @@ message that names the action and target. A reaction alone is insufficient.
 - Install the Codex Slack app only in `#build`. Its GitHub App and Cloud
   environments may access public product repositories listed in the registry,
   but never private signing or credential repositories.
+- Give every active product its own Codex environment with exactly the one
+  repository declared in `automation/codex-targets.yml`. Never rely on a recent
+  environment or the first repository in a multi-repository map.
 - Keep ChatGPT available for deliberate synthesis and Canvas work. Do not add
   automatic ChatGPT responses to incident channels.
 - Link the GitHub Slack app to the public Getyak repositories for rich previews
@@ -124,9 +129,15 @@ message that names the action and target. A reaction alone is insufficient.
 - Do not subscribe `#ops` to unfiltered `workflows`, `commits`, or every
   repository event. The control loop owns failure-only workflow routing because
   the native workflow subscription reports successful runs too.
-- A Codex request must name one repository and one verifiable outcome. The
-  resulting pull request is the durable artifact; discussion and approval stay
-  in the originating Slack thread.
+- A Codex request must name one repository, its exact environment, one
+  verifiable outcome, and the originating thread. Reject the request if the
+  declared target is not `ready`. The resulting pull request is the durable
+  artifact; discussion and approval stay in the originating Slack thread.
+- Begin code review with deliberate `@codex review` requests. Enable automatic
+  review only after a representative sample shows useful P0/P1 signal and the
+  product repository contains two or three outcome-focused rules under
+  `## Code Review Rules` in the applicable `AGENTS.md`. Keep mechanical checks
+  in CI.
 
 ### Persistent-access checklist
 

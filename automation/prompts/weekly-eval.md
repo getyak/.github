@@ -20,7 +20,9 @@ Run once each Friday in `Asia/Shanghai`.
    a coverage state of `complete`, `partial`, or `invalid`.
 6. Route real regressions or meaningful improvements to one weekly `#signals`
    digest. Put implementation work in `#build` only when it can be expressed as
-   a bounded task with acceptance evidence.
+   a bounded task with acceptance evidence. Build it from
+   `automation/templates/codex-task.md` and do not mention `@Codex` unless
+   `automation/scripts/codex-task-lint.sh` passes against a `ready` target.
 7. Escalate to `#hq` only when a result changes a product decision, release
    decision, safety boundary, or portfolio priority. Do not copy the full
    `#signals` digest.

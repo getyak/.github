@@ -48,6 +48,13 @@ evidence location, CI workflow (when present), acceptance statement, privacy
 boundary, and explicit coverage gap. These fields guide discovery; the product
 repository and immutable run artifacts remain the source of truth.
 
+The desired one-environment/one-repository mapping for Slack-driven Codex work
+lives in [`automation/codex-targets.yml`](automation/codex-targets.yml). A
+target marked `pending_verification` or `paused` is not runnable. Every request
+must pass the fail-closed
+[`automation/codex-task-contract.md`](automation/codex-task-contract.md) before
+an operator mentions `@Codex`.
+
 ## Operator entry points
 
 - Run `automation/scripts/portfolio-health.sh` for a read-only JSON Lines
@@ -74,8 +81,16 @@ repository and immutable run artifacts remain the source of truth.
   shell (including shell process substitution); scan failures and matches are
   configuration drift rather than a silent clean result.
 - Run `automation/scripts/registry.test.sh` after changing repository
-  lifecycle or Eval metadata. Every active product must keep a complete,
-  machine-readable Eval discovery contract.
+  lifecycle, Eval metadata, or Codex targets. Every active product must keep a
+  complete, machine-readable Eval discovery contract and exactly one desired
+  Codex environment mapping.
+- Run `automation/scripts/codex-task-lint.sh TASK.md` before dispatching a
+  Slack task to Codex. It rejects ambiguous, secret-bearing, unapproved, or
+  unverified targets and requires the source thread, acceptance evidence,
+  recovery path, and human boundary.
+- Run `automation/scripts/codex-review-health.sh` for a read-only JSON Lines
+  inventory of Codex environment readiness, applicable `AGENTS.md` files, and
+  repository-owned `## Code Review Rules` coverage.
 - Run `automation/scripts/eval-health.sh` before the weekly Eval review. It
   proves the declared suite and workflow exist on the default branch, finds a
   successful run where the exact Eval job and step actually executed, verifies
