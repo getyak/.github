@@ -46,11 +46,88 @@ portfolio_api_object() {
   fi
 }
 
+portfolio_workflow_supply_chain() {
+  local repo="$1"
+  local branch="$2"
+  local tree_json workflow_records workflow_path blob_sha blob_json content matches line_number
+  local findings='[]'
+
+  if [[ -z "$branch" ]] ||
+    ! tree_json="$(gh api "repos/$repo/git/trees/$branch?recursive=1" 2>/dev/null)" ||
+    ! jq -e '.truncated != true and (.tree | type == "array")' >/dev/null 2>&1 <<<"$tree_json"; then
+    printf '{"state":"unavailable","remote_script_pipe_count":0,"findings":[]}\n'
+    return
+  fi
+
+  workflow_records="$(jq -r '
+    .tree[]?
+    | select(.type == "blob")
+    | select(.path | test("^\\.github/workflows/.*\\.ya?ml$"))
+    | [.path, .sha]
+    | @tsv
+  ' <<<"$tree_json")"
+
+  while IFS=$'\t' read -r workflow_path blob_sha; do
+    [[ -n "$workflow_path" && -n "$blob_sha" ]] || continue
+    if ! blob_json="$(gh api "repos/$repo/git/blobs/$blob_sha" 2>/dev/null)" ||
+      ! jq -e '.encoding == "base64" and (.content | type == "string")' >/dev/null 2>&1 <<<"$blob_json" ||
+      ! content="$(jq -r 'select(.encoding == "base64") | .content // empty' <<<"$blob_json" \
+        | tr -d '\r\n' \
+        | base64 --decode 2>/dev/null)"; then
+      printf '{"state":"unavailable","remote_script_pipe_count":0,"findings":[]}\n'
+      return
+    fi
+
+    matches="$(awk '
+      function inspect(value, number, normalized) {
+        normalized = tolower(value)
+        sub(/^[[:space:]]+/, "", normalized)
+        if (normalized ~ /^#/) return
+        if (normalized ~ /(curl|wget)[^|]*\|[[:space:]\\]*(sudo[[:space:]]+)?(bash|sh|zsh)([[:space:];&]|$)/ || normalized ~ /(bash|sh|zsh)[[:space:]]*<\([[:space:]]*(curl|wget)([[:space:]]|$)/) print number
+      }
+      {
+        value = $0
+        sub(/\r$/, "", value)
+        if (logical == "") start = NR
+        logical = logical value
+        if (logical ~ /\\[[:space:]]*$/) {
+          sub(/\\[[:space:]]*$/, " ", logical)
+          next
+        }
+        if (tolower(logical) ~ /(curl|wget)[^|]*\|[[:space:]]*$/) {
+          logical = logical " "
+          next
+        }
+        inspect(logical, start)
+        logical = ""
+      }
+      END {
+        if (logical != "") inspect(logical, start)
+      }
+    ' <<<"$content")"
+
+    while IFS= read -r line_number; do
+      [[ -n "$line_number" ]] || continue
+      findings="$(jq -cn \
+        --argjson findings "$findings" \
+        --arg path "$workflow_path" \
+        --argjson line "$line_number" \
+        '$findings + [{path: $path, line: $line}]')"
+    done <<<"$matches"
+  done <<<"$workflow_records"
+
+  jq -cn --argjson findings "$findings" '{
+    state: "available",
+    remote_script_pipe_count: ($findings | length),
+    findings: $findings
+  }'
+}
+
 portfolio_inspect_repo() {
   local encoded="$1"
   local repo_json repo branch pushed_at recent_runs
   local dependabot code_scanning secret_scanning
-  local repository_settings actions_permissions workflow_permissions output_path
+  local repository_settings actions_permissions workflow_permissions workflow_supply_chain output_path
 
   repo_json="$(printf '%s' "$encoded" | base64 --decode)"
   repo="$(jq -r '.nameWithOwner' <<<"$repo_json")"
@@ -70,6 +147,7 @@ portfolio_inspect_repo() {
   repository_settings="$(portfolio_api_object "repos/$repo")"
   actions_permissions="$(portfolio_api_object "repos/$repo/actions/permissions")"
   workflow_permissions="$(portfolio_api_object "repos/$repo/actions/permissions/workflow")"
+  workflow_supply_chain="$(portfolio_workflow_supply_chain "$repo" "$branch")"
 
   output_path="$portfolio_output_dir/${repo//\//__}.json"
   jq -cn \
@@ -85,6 +163,7 @@ portfolio_inspect_repo() {
     --argjson repository_settings "$repository_settings" \
     --argjson actions_permissions "$actions_permissions" \
     --argjson workflow_permissions "$workflow_permissions" \
+    --argjson workflow_supply_chain "$workflow_supply_chain" \
     '{
       observed_at: $observed_at,
       repository: $repository,
@@ -171,6 +250,7 @@ portfolio_inspect_repo() {
         default_workflow_permissions: ($workflow_permissions.value.default_workflow_permissions // "unknown"),
         actions_can_approve_pull_request_reviews: ($workflow_permissions.value.can_approve_pull_request_reviews // false)
       },
+      workflow_supply_chain: $workflow_supply_chain,
       configuration_drift: ([
         if $repository_settings.state != "available" then
           "repository_settings_unavailable"
@@ -195,12 +275,18 @@ portfolio_inspect_repo() {
         else empty end,
         if $workflow_permissions.state == "available" and
           ($workflow_permissions.value.default_workflow_permissions // "unknown") != "read"
-        then "default_workflow_permissions_not_read" else empty end
+        then "default_workflow_permissions_not_read" else empty end,
+        if $workflow_supply_chain.state != "available" then
+          "workflow_supply_chain_scan_unavailable"
+        else empty end,
+        if $workflow_supply_chain.state == "available" and
+          $workflow_supply_chain.remote_script_pipe_count > 0
+        then "workflow_remote_script_pipe_present" else empty end
       ])
     }' >"$output_path"
 }
 
-export -f portfolio_api_collection portfolio_api_object portfolio_inspect_repo
+export -f portfolio_api_collection portfolio_api_object portfolio_workflow_supply_chain portfolio_inspect_repo
 export now cutoff_epoch portfolio_output_dir
 
 repo_records="$(gh repo list "$org" --visibility public --no-archived --limit 200 \
