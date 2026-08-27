@@ -33,6 +33,10 @@ repositories:
       command: pnpm eval:core
       evidence: required CI logs and docs/evaluations/
       ci_workflow: .github/workflows/ci.yml
+      ci_job: Web quality
+      ci_step: Run candidate momentum Eval
+      artifact_prefix: null
+      artifact_partial_pattern: null
       acceptance: all synthetic contract assertions pass
       privacy: synthetic_only
       gap: no model-backed candidate-versus-baseline quality metric
@@ -81,6 +85,10 @@ repositories:
       command: uv run --project agents python eval/delivery-loop/run.py
       evidence: ttar-report artifact
       ci_workflow: .github/workflows/ci.yml
+      ci_job: TTAR gate (delivery loop)
+      ci_step: Run TTAR gate
+      artifact_prefix: ttar-report-
+      artifact_partial_pattern: null
       acceptance: TTAR success >=85%, fabrication rate =0, parse-JD success >=90%
       privacy: synthetic_only
       gap: promptfoo baseline is optional and model-backed jobs skip without a configured key
@@ -97,6 +105,10 @@ repositories:
       command: uv run python -m eval.ci.scoreboard --out docs/scoreboard.md --fail-under 10.5
       evidence: eval-scoreboard CI artifact and eval/results/
       ci_workflow: .github/workflows/ci.yml
+      ci_job: backend
+      ci_step: Run Eval scoreboard
+      artifact_prefix: eval-scoreboard-
+      artifact_partial_pattern: provider not configured|no evidence|exhausted retries|unparseable
       acceptance: no judge crashes, median at least 10.5, and no dimension regression
       privacy: synthetic_only
       gap: provider-backed dimensions are partial coverage when the provider is unavailable

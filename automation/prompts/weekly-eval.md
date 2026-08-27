@@ -3,11 +3,12 @@
 Run once each Friday in `Asia/Shanghai`.
 
 1. Read the control-plane policy in `getyak/.github`.
-2. For each active product, read its `eval_contract` from
-   `automation/registry.yml`, then verify the declared suite, command, workflow,
-   and evidence path against the repository's current default branch. The
-   product repository remains authoritative; registry data is a discovery
-   contract, not proof that a gate ran.
+2. Run `automation/scripts/eval-health.sh`, then read each active product's
+   `eval_contract` from `automation/registry.yml`. Verify the declared suite,
+   command, workflow, exact successful CI job and step, and evidence path
+   against the repository's current default branch. The product repository and
+   run artifact remain authoritative; registry data is a discovery contract,
+   not proof that a gate ran.
 3. Classify maturity exactly as declared. `ci_gated` requires a successful
    run and retrievable evidence; `versioned_manual` is coverage debt until an
    equivalent run is observed; `deterministic_test_proxy` is useful evidence
