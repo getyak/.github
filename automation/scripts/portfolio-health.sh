@@ -50,6 +50,89 @@ portfolio_api_object() {
   fi
 }
 
+portfolio_default_branch_ruleset() {
+  local repo="$1"
+  local branch="$2"
+  local rulesets_json ruleset_id ruleset_json
+  local ruleset_details='[]'
+
+  if [[ -z "$branch" ]] ||
+    ! rulesets_json="$(gh api "repos/$repo/rulesets?includes_parents=true" 2>/dev/null)" ||
+    ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"$rulesets_json"; then
+    printf '{"state":"unavailable","matching_count":0,"qualifying_count":0,"qualifying_rulesets":[],"insufficient_rulesets":[],"unexpected_bypass_actors":[]}\n'
+    return
+  fi
+
+  while IFS= read -r ruleset_id; do
+    [[ -n "$ruleset_id" ]] || continue
+    if ! ruleset_json="$(gh api "repos/$repo/rulesets/$ruleset_id" 2>/dev/null)" ||
+      ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"$ruleset_json"; then
+      printf '{"state":"unavailable","matching_count":0,"qualifying_count":0,"qualifying_rulesets":[],"insufficient_rulesets":[],"unexpected_bypass_actors":[]}\n'
+      return
+    fi
+    ruleset_details="$(jq -cn \
+      --argjson details "$ruleset_details" \
+      --argjson ruleset "$ruleset_json" \
+      '$details + [$ruleset]')"
+  done < <(jq -r '.[]? | select(.target == "branch" and .enforcement == "active") | .id' <<<"$rulesets_json")
+
+  jq -cn \
+    --arg branch "$branch" \
+    --argjson details "$ruleset_details" '
+    [
+      $details[]?
+      | select(.target == "branch" and .enforcement == "active")
+      | select(any(
+          (.conditions.ref_name.include // [])[]?;
+          . == "~DEFAULT_BRANCH" or . == ("refs/heads/" + $branch) or . == $branch
+        ))
+    ] as $matching |
+    [
+      $matching[]
+      | select(any(.rules[]?; .type == "deletion"))
+      | select(any(.rules[]?; .type == "non_fast_forward"))
+      | select(any(
+          .rules[]?;
+          .type == "merge_queue" or
+          (
+            .type == "pull_request" and
+            (.parameters.required_review_thread_resolution // false) == true and
+            (.parameters.require_extra_approval_for_unattributed_changes // false) == true
+          )
+        ))
+    ] as $qualifying |
+    {
+      state: "available",
+      matching_count: ($matching | length),
+      qualifying_count: ($qualifying | length),
+      qualifying_rulesets: [
+        $qualifying[]
+        | {
+            id,
+            name,
+            source_type,
+            gate: (
+              if any(.rules[]?; .type == "merge_queue") then "merge_queue"
+              else "pull_request" end
+            )
+          }
+      ],
+      insufficient_rulesets: [
+        $matching[] as $ruleset
+        | select(any($qualifying[]?; .id == $ruleset.id) | not)
+        | {id: $ruleset.id, name: $ruleset.name, source_type: $ruleset.source_type}
+      ],
+      unexpected_bypass_actors: [
+        $matching[]
+        | .id as $ruleset_id
+        | .name as $ruleset_name
+        | (.bypass_actors // [])[]?
+        | select(.actor_type != "OrganizationAdmin")
+        | {ruleset_id: $ruleset_id, ruleset_name: $ruleset_name, actor_type, actor_id, bypass_mode}
+      ]
+    }'
+}
+
 portfolio_workflow_supply_chain() {
   local repo="$1"
   local branch="$2"
@@ -164,7 +247,7 @@ portfolio_inspect_repo() {
   local encoded="$1"
   local repo_json repo branch pushed_at recent_runs
   local dependabot code_scanning secret_scanning
-  local repository_settings actions_permissions selected_actions workflow_permissions workflow_supply_chain output_path
+  local repository_settings actions_permissions selected_actions workflow_permissions default_branch_ruleset workflow_supply_chain output_path
 
   repo_json="$(printf '%s' "$encoded" | base64 --decode)"
   repo="$(jq -r '.nameWithOwner' <<<"$repo_json")"
@@ -189,6 +272,7 @@ portfolio_inspect_repo() {
     selected_actions='{"state":"not_applicable","value":null}'
   fi
   workflow_permissions="$(portfolio_api_object "repos/$repo/actions/permissions/workflow")"
+  default_branch_ruleset="$(portfolio_default_branch_ruleset "$repo" "$branch")"
   workflow_supply_chain="$(portfolio_workflow_supply_chain "$repo" "$branch")"
 
   output_path="$portfolio_output_dir/${repo//\//__}.json"
@@ -206,6 +290,7 @@ portfolio_inspect_repo() {
     --argjson actions_permissions "$actions_permissions" \
     --argjson selected_actions "$selected_actions" \
     --argjson workflow_permissions "$workflow_permissions" \
+    --argjson default_branch_ruleset "$default_branch_ruleset" \
     --argjson workflow_supply_chain "$workflow_supply_chain" \
     '($selected_actions.value.patterns_allowed // []) as $allowed_action_patterns |
     ($workflow_supply_chain.expected_action_patterns // []) as $expected_action_patterns |
@@ -306,6 +391,7 @@ portfolio_inspect_repo() {
         default_workflow_permissions: ($workflow_permissions.value.default_workflow_permissions // "unknown"),
         actions_can_approve_pull_request_reviews: ($workflow_permissions.value.can_approve_pull_request_reviews // false)
       },
+      default_branch_ruleset: $default_branch_ruleset,
       workflow_supply_chain: $workflow_supply_chain,
       actions_allowlist: {
         state: $selected_actions.state,
@@ -363,6 +449,15 @@ portfolio_inspect_repo() {
         if $workflow_permissions.state == "available" and
           ($workflow_permissions.value.default_workflow_permissions // "unknown") != "read"
         then "default_workflow_permissions_not_read" else empty end,
+        if $default_branch_ruleset.state != "available" then
+          "default_branch_ruleset_unavailable"
+        else empty end,
+        if $default_branch_ruleset.state == "available" and
+          ($default_branch_ruleset.qualifying_count // 0) == 0
+        then "default_branch_ruleset_missing" else empty end,
+        if $default_branch_ruleset.state == "available" and
+          (($default_branch_ruleset.unexpected_bypass_actors // []) | length) > 0
+        then "default_branch_ruleset_unexpected_bypass" else empty end,
         if $workflow_supply_chain.state != "available" then
           "workflow_supply_chain_scan_unavailable"
         else empty end,
@@ -373,7 +468,7 @@ portfolio_inspect_repo() {
     }' >"$output_path"
 }
 
-export -f portfolio_api_collection portfolio_api_object portfolio_workflow_supply_chain portfolio_inspect_repo
+export -f portfolio_api_collection portfolio_api_object portfolio_default_branch_ruleset portfolio_workflow_supply_chain portfolio_inspect_repo
 export now cutoff_epoch portfolio_output_dir
 
 repo_records="$(gh repo list "$org" --visibility public --no-archived --limit 200 \

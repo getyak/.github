@@ -11,7 +11,10 @@ Run once on weekdays in `Asia/Shanghai`. This is a read-mostly control loop.
    Action SHA enforcement are the expected public-repository baseline. Each
    repository must allow only GitHub-owned Actions plus the exact external
    Action repositories its default branch uses; verified creators are not a
-   blanket exception. Treat missing or stale allowlist entries, an unavailable
+   blanket exception. The default branch must also block deletion and force
+   pushes and require a pull request with resolved review threads or a merge
+   queue, with no bypass outside organization administrators. Treat missing or
+   stale allowlist entries, a missing branch ruleset, an unavailable
    `workflow_supply_chain` scan, an unpinned external Action, or any remote
    script piped directly into a shell as configuration drift requiring
    inspection.

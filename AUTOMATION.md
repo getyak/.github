@@ -65,10 +65,14 @@ repository and immutable run artifacts remain the source of truth.
   its default branch. External references must remain pinned to full commit
   SHAs; the allowlist uses `owner/action@*` so Dependabot can propose a new SHA
   without granting a new vendor. Missing, stale, or broadly verified-creator
-  allowlist entries are configuration drift. The `workflow_supply_chain` field
-  also scans default-branch workflow sources for remote scripts piped directly
-  into a shell (including shell process substitution); scan failures and
-  matches are configuration drift rather than a silent clean result.
+  allowlist entries are configuration drift. Every public repository must also
+  keep an active ruleset on its default branch that blocks deletion and
+  non-fast-forward updates and gates changes through a pull request with
+  resolved review threads or a merge queue. Only organization administrators
+  may retain an emergency bypass. The `workflow_supply_chain` field also scans
+  default-branch workflow sources for remote scripts piped directly into a
+  shell (including shell process substitution); scan failures and matches are
+  configuration drift rather than a silent clean result.
 - Run `automation/scripts/registry.test.sh` after changing repository
   lifecycle or Eval metadata. Every active product must keep a complete,
   machine-readable Eval discovery contract.
