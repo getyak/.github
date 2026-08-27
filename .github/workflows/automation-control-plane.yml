@@ -1,0 +1,32 @@
+name: Automation control plane
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/automation-control-plane.yml
+      - AUTOMATION.md
+      - automation/**
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/automation-control-plane.yml
+      - AUTOMATION.md
+      - automation/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: automation-control-plane-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: Validate automation contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Run control-plane tests
+        run: automation/scripts/registry.test.sh

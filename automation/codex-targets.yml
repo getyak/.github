@@ -1,0 +1,57 @@
+version: 1
+
+slack:
+  channel: build
+  task_thread_required: true
+  completion_posting: link_only_preferred_if_workspace_supports_it
+
+policy:
+  repository_scope: selected_public_repositories
+  environment_scope: one_environment_with_one_repository
+  ambiguous_target: reject
+  unverified_target: reject
+  review_rollout: manual_before_automatic
+  approval_boundary: explicit_human_message
+
+targets:
+  talent-signal:
+    repository: getyak/talent-signal
+    desired_environment: getyak-talent-signal
+    repo_map: [getyak/talent-signal]
+    integration_state: pending_verification
+    review_mode: manual_p0_p1_after_setup
+  daypage:
+    repository: getyak/daypage
+    desired_environment: getyak-daypage
+    repo_map: [getyak/daypage]
+    integration_state: pending_verification
+    review_mode: manual_p0_p1_after_setup
+  FitCoach:
+    repository: getyak/FitCoach
+    desired_environment: getyak-fitcoach
+    repo_map: [getyak/FitCoach]
+    integration_state: pending_verification
+    review_mode: manual_p0_p1_after_setup
+  apply-agent:
+    repository: getyak/apply-agent
+    desired_environment: getyak-apply-agent
+    repo_map: [getyak/apply-agent]
+    integration_state: pending_verification
+    review_mode: manual_p0_p1_after_setup
+  telepace-next:
+    repository: getyak/telepace-next
+    desired_environment: getyak-telepace-next
+    repo_map: [getyak/telepace-next]
+    integration_state: pending_verification
+    review_mode: manual_p0_p1_after_setup
+  solo-compass:
+    repository: getyak/solo-compass
+    desired_environment: getyak-solo-compass
+    repo_map: [getyak/solo-compass]
+    integration_state: pending_verification
+    review_mode: manual_p0_p1_after_setup
+
+excluded:
+  - private signing repositories
+  - credential and secret repositories
+  - repositories outside getyak
