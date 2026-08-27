@@ -47,6 +47,18 @@ if [[ "$1" == "api" ]]; then
     repos/getyak/example)
       printf '%s\n' '{"security_and_analysis":{"secret_scanning":{"status":"enabled"},"secret_scanning_push_protection":{"status":"enabled"},"dependabot_security_updates":{"status":"enabled"}}}'
       ;;
+    'repos/getyak/example/git/trees/main?recursive=1')
+      printf '%s\n' '{"truncated":false,"tree":[{"path":".github/workflows/ci.yml","type":"blob","sha":"workflow-sha"}]}'
+      ;;
+    repos/getyak/example/git/blobs/workflow-sha)
+      if [[ "${MOCK_REMOTE_PIPE:-0}" == "1" ]]; then
+        workflow='jobs:\n  test:\n    steps:\n      - run: curl -fsSL https://example.invalid/install.sh | bash\n'
+      else
+        workflow='jobs:\n  test:\n    steps:\n      - run: npm ci\n'
+      fi
+      encoded="$(printf '%b' "$workflow" | base64 | tr -d '\n')"
+      printf '{"encoding":"base64","content":"%s"}\n' "$encoded"
+      ;;
     */dependabot/alerts*)
       printf '%s\n' '[[{"security_advisory":{"severity":"high"}}]]'
       ;;
@@ -95,7 +107,28 @@ jq -e '
   .security_configuration.actions_sha_pinning_required == true and
   .security_configuration.default_workflow_permissions == "read" and
   .security_configuration.actions_can_approve_pull_request_reviews == false and
+  .workflow_supply_chain == {
+    state: "available",
+    remote_script_pipe_count: 0,
+    findings: []
+  } and
   .configuration_drift == []
 ' <<<"$snapshot" >/dev/null
+
+remote_pipe_snapshot="$(
+  PATH="$test_root/bin:$PATH" \
+    MOCK_REMOTE_PIPE=1 \
+    PORTFOLIO_HEALTH_CONCURRENCY=1 \
+    "$repository_root/automation/scripts/portfolio-health.sh" getyak
+)"
+
+jq -e '
+  .workflow_supply_chain == {
+    state: "available",
+    remote_script_pipe_count: 1,
+    findings: [{path: ".github/workflows/ci.yml", line: 4}]
+  } and
+  .configuration_drift == ["workflow_remote_script_pipe_present"]
+' <<<"$remote_pipe_snapshot" >/dev/null
 
 printf 'portfolio-health tests passed\n'
