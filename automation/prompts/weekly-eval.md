@@ -15,7 +15,8 @@ Run once each Friday in `Asia/Shanghai`.
 4. Compare the newest candidate with its declared baseline. Never compare
    incomparable datasets or silently substitute a missing baseline.
 5. Record suite version, dataset version, sample size, metric, threshold,
-   candidate revision, baseline revision, delta, artifact URL, and uncertainty.
+   candidate revision, baseline revision, delta, artifact URL, uncertainty, and
+   a coverage state of `complete`, `partial`, or `invalid`.
 6. Route real regressions or meaningful improvements to one weekly `#signals`
    digest. Put implementation work in `#build` only when it can be expressed as
    a bounded task with acceptance evidence.
@@ -23,8 +24,10 @@ Run once each Friday in `Asia/Shanghai`.
    decision, safety boundary, or portfolio priority. Do not copy the full
    `#signals` digest.
 8. Treat a missing contract, missing baseline, missing required CI run, skipped
-   secret-dependent job, or stale declared path as coverage debt, never as a
-   passing result. Propose the smallest representative fixture and one
+   secret-dependent job, unavailable grader provider, exhausted grader retry,
+   unparseable grader output, or stale declared path as coverage debt, never as
+   full coverage. A judge crash makes the run invalid even if an aggregate
+   median still passes. Propose the smallest representative fixture and one
    deterministic metric.
 9. Do not expose raw candidate, journal, customer, conversation, or location
    data in Slack. Use synthetic fixtures or access-controlled artifacts.

@@ -75,11 +75,18 @@ An Eval notification must contain:
 - delta and threshold;
 - artifact URL;
 - known uncertainty or sample-size limitation;
+- coverage state: `complete`, `partial`, or `invalid`;
 - proposed next experiment.
 
 Models may explain a grader result, but the message must distinguish measured
 facts from model interpretation. A regression enters `#signals`; it enters
 `#build` only when there is a scoped implementation task.
+
+An exit code of zero is not sufficient evidence by itself. A judge crash makes
+the result `invalid`. Missing evidence, an unavailable provider, exhausted
+retries, or unparseable grader output makes it `partial` unless the declared
+contract explicitly provides and verifies an equivalent deterministic grader.
+Never summarize either state as full Eval coverage.
 
 ## Approval reactions
 

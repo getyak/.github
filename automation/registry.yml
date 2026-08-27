@@ -28,14 +28,14 @@ repositories:
     surfaces: [backend, ios, testflight]
     eval_mode: native
     eval_contract:
-      maturity: versioned_manual
+      maturity: ci_gated
       primary_suite: evals/candidate-momentum-v1.json
       command: pnpm eval:core
-      evidence: docs/evaluations/
-      ci_workflow: null
+      evidence: required CI logs and docs/evaluations/
+      ci_workflow: .github/workflows/ci.yml
       acceptance: all synthetic contract assertions pass
       privacy: synthetic_only
-      gap: the primary Eval suite is not an explicit required CI check
+      gap: no model-backed candidate-versus-baseline quality metric
     ci_route: ops
     eval_route: signals
     release_route: build
@@ -92,14 +92,14 @@ repositories:
     surfaces: [frontend, backend, production]
     eval_mode: native
     eval_contract:
-      maturity: versioned_manual
+      maturity: ci_gated
       primary_suite: eval/datasets/scenarios/
       command: uv run python -m eval.ci.scoreboard --out docs/scoreboard.md --fail-under 10.5
-      evidence: eval/results/ and docs/scoreboard.md
-      ci_workflow: null
-      acceptance: scoreboard passes its declared threshold without dimension regression
+      evidence: eval-scoreboard CI artifact and eval/results/
+      ci_workflow: .github/workflows/ci.yml
+      acceptance: no judge crashes, median at least 10.5, and no dimension regression
       privacy: synthetic_only
-      gap: the versioned scoreboard is not an explicit required CI check
+      gap: provider-backed dimensions are partial coverage when the provider is unavailable
     ci_route: ops
     eval_route: signals
     release_route: build
