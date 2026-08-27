@@ -21,6 +21,11 @@ if [[ ! "$concurrency" =~ ^[1-9][0-9]*$ ]] || ((concurrency > 16)); then
   echo "PORTFOLIO_HEALTH_CONCURRENCY must be an integer from 1 to 16" >&2
   exit 2
 fi
+api_retry_delay_seconds="${PORTFOLIO_HEALTH_API_RETRY_DELAY_SECONDS:-1}"
+if [[ ! "$api_retry_delay_seconds" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  echo "PORTFOLIO_HEALTH_API_RETRY_DELAY_SECONDS must be a non-negative number" >&2
+  exit 2
+fi
 if cutoff_epoch="$(date -u -v-7d +%s 2>/dev/null)"; then
   :
 else
@@ -30,10 +35,24 @@ fi
 portfolio_output_dir="$(mktemp -d "${TMPDIR:-/tmp}/getyak-portfolio-health.XXXXXX")"
 trap 'rm -rf "$portfolio_output_dir"' EXIT
 
+portfolio_gh_api_json() {
+  local attempt value
+  for attempt in 1 2 3; do
+    if value="$(gh api "$@" 2>/dev/null)" && jq -e . >/dev/null 2>&1 <<<"$value"; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+    if ((attempt < 3)); then
+      sleep "$api_retry_delay_seconds"
+    fi
+  done
+  return 1
+}
+
 portfolio_api_collection() {
   local endpoint="$1"
   local pages
-  if pages="$(gh api --paginate --slurp "$endpoint" 2>/dev/null)"; then
+  if pages="$(portfolio_gh_api_json --paginate --slurp "$endpoint")"; then
     jq -c '{state: "enabled", items: (add // [])}' <<<"$pages"
   else
     printf '{"state":"unavailable","items":[]}\n'
@@ -43,7 +62,7 @@ portfolio_api_collection() {
 portfolio_api_object() {
   local endpoint="$1"
   local value
-  if value="$(gh api "$endpoint" 2>/dev/null)" && jq -e . >/dev/null 2>&1 <<<"$value"; then
+  if value="$(portfolio_gh_api_json "$endpoint")"; then
     jq -cn --argjson value "$value" '{state: "available", value: $value}'
   else
     printf '{"state":"unavailable","value":null}\n'
@@ -57,7 +76,7 @@ portfolio_default_branch_ruleset() {
   local ruleset_details='[]'
 
   if [[ -z "$branch" ]] ||
-    ! rulesets_json="$(gh api "repos/$repo/rulesets?includes_parents=true" 2>/dev/null)" ||
+    ! rulesets_json="$(portfolio_gh_api_json "repos/$repo/rulesets?includes_parents=true")" ||
     ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"$rulesets_json"; then
     printf '{"state":"unavailable","matching_count":0,"qualifying_count":0,"qualifying_rulesets":[],"insufficient_rulesets":[],"unexpected_bypass_actors":[]}\n'
     return
@@ -65,7 +84,7 @@ portfolio_default_branch_ruleset() {
 
   while IFS= read -r ruleset_id; do
     [[ -n "$ruleset_id" ]] || continue
-    if ! ruleset_json="$(gh api "repos/$repo/rulesets/$ruleset_id" 2>/dev/null)" ||
+    if ! ruleset_json="$(portfolio_gh_api_json "repos/$repo/rulesets/$ruleset_id")" ||
       ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"$ruleset_json"; then
       printf '{"state":"unavailable","matching_count":0,"qualifying_count":0,"qualifying_rulesets":[],"insufficient_rulesets":[],"unexpected_bypass_actors":[]}\n'
       return
@@ -142,7 +161,7 @@ portfolio_workflow_supply_chain() {
   local action_findings='[]'
 
   if [[ -z "$branch" ]] ||
-    ! tree_json="$(gh api "repos/$repo/git/trees/$branch?recursive=1" 2>/dev/null)" ||
+    ! tree_json="$(portfolio_gh_api_json "repos/$repo/git/trees/$branch?recursive=1")" ||
     ! jq -e '.truncated != true and (.tree | type == "array")' >/dev/null 2>&1 <<<"$tree_json"; then
     printf '{"state":"unavailable","remote_script_pipe_count":0,"findings":[],"external_action_refs":[],"expected_action_patterns":[],"unpinned_external_action_count":0,"unpinned_external_action_findings":[]}\n'
     return
@@ -158,7 +177,7 @@ portfolio_workflow_supply_chain() {
 
   while IFS=$'\t' read -r workflow_path blob_sha; do
     [[ -n "$workflow_path" && -n "$blob_sha" ]] || continue
-    if ! blob_json="$(gh api "repos/$repo/git/blobs/$blob_sha" 2>/dev/null)" ||
+    if ! blob_json="$(portfolio_gh_api_json "repos/$repo/git/blobs/$blob_sha")" ||
       ! jq -e '.encoding == "base64" and (.content | type == "string")' >/dev/null 2>&1 <<<"$blob_json" ||
       ! content="$(jq -r 'select(.encoding == "base64") | .content // empty' <<<"$blob_json" \
         | tr -d '\r\n' \
@@ -468,8 +487,8 @@ portfolio_inspect_repo() {
     }' >"$output_path"
 }
 
-export -f portfolio_api_collection portfolio_api_object portfolio_default_branch_ruleset portfolio_workflow_supply_chain portfolio_inspect_repo
-export now cutoff_epoch portfolio_output_dir
+export -f portfolio_gh_api_json portfolio_api_collection portfolio_api_object portfolio_default_branch_ruleset portfolio_workflow_supply_chain portfolio_inspect_repo
+export now cutoff_epoch portfolio_output_dir api_retry_delay_seconds
 
 repo_records="$(gh repo list "$org" --visibility public --no-archived --limit 200 \
   --json nameWithOwner,isFork,defaultBranchRef,pushedAt \
